@@ -12,6 +12,28 @@ class OpeningHourSerializer(serializers.ModelSerializer):
         fields = ['weekday', 'start_time', 'end_time', 'is_closed']
 
 
+class SwimmingPoolSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(use_url=True, allow_null=True)
+    academy_name = serializers.CharField(source='academy.name', read_only=True)
+    academy_id = serializers.IntegerField(source='academy.id', read_only=True)
+
+    class Meta:
+        model = SwimmingPool
+        fields = [
+            'id', 'name', 'academy_name', 'academy_id',
+            'speciality', 'dimension', 'heated', 'showers',
+            'image', 'created_at',
+        ]
+
+
+class AcademyListSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(source='picture', use_url=True, allow_null=True)
+
+    class Meta:
+        model  = Academy
+        fields = ['id', 'name', 'city', 'address', 'specialities', 'image', 'created_at', 'updated_at']
+
+
 class AcademySerializer(serializers.ModelSerializer):
     image                  = serializers.ImageField(source='picture', use_url=True, allow_null=True)
     pool_list              = serializers.SerializerMethodField()
@@ -26,4 +48,12 @@ class AcademySerializer(serializers.ModelSerializer):
         ]
 
     def get_pool_list(self, obj):
-        return list(obj.swimming_pools.values_list('name', flat=True))
+        request = self.context.get('request')
+        return [
+            {
+                'id': p.id,
+                'name': p.name,
+                'image': request.build_absolute_uri(p.image.url) if request and p.image else None,
+            }
+            for p in obj.swimming_pools.all()
+        ]
