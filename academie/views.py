@@ -1,26 +1,49 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Academy
-from .serializers import AcademySerializer
+from .models import Academy, SwimmingPool
+from .serializers import AcademyListSerializer, AcademySerializer, SwimmingPoolSerializer
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def academy_list(request):
-    academies = Academy.objects.prefetch_related('swimming_pools', 'opening_hours').all()
-    serializer = AcademySerializer(academies, many=True, context={'request': request})
-    return Response({'data': serializer.data})
+class AcademyListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        academies = Academy.objects.all()
+        serializer = AcademyListSerializer(academies, many=True, context={'request': request})
+        return Response({'data': serializer.data})
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def academy_detail(request, pk):
-    try:
-        academy = Academy.objects.prefetch_related('swimming_pools', 'opening_hours').get(pk=pk)
-    except Academy.DoesNotExist:
-        return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
-    serializer = AcademySerializer(academy, context={'request': request})
-    return Response({'data': serializer.data})
+class AcademyDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            academy = Academy.objects.prefetch_related('swimming_pools', 'opening_hours').get(pk=pk)
+        except Academy.DoesNotExist:
+            return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = AcademySerializer(academy, context={'request': request})
+        return Response({'data': serializer.data})
+
+
+class PoolListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        pools = SwimmingPool.objects.select_related('academy').all()
+        serializer = SwimmingPoolSerializer(pools, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+
+class PoolDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            pool = SwimmingPool.objects.select_related('academy').get(pk=pk)
+        except SwimmingPool.DoesNotExist:
+            return Response({'error': 'Pool not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SwimmingPoolSerializer(pool, context={'request': request})
+        return Response({'data': serializer.data})
