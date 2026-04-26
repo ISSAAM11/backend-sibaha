@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .serializers import LoginSerializer, get_tokens_for_user
+from .serializers import LoginSerializer, RegisterSerializer, get_tokens_for_user
 
 
 def build_user_payload(user: User):
@@ -16,9 +16,26 @@ def build_user_payload(user: User):
         "id": user.id,
         "username": user.username,
         "email": user.email,
-        # Valeur simple pour coller à ton Flutter, tu pourras l'affiner plus tard.
-        "user_type": "user",
+        "phone": user.phone,
+        "user_type": user.user_type,
     }
+
+
+class RegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        tokens = get_tokens_for_user(user)
+        data = {
+            "user": build_user_payload(user),
+            "access": tokens["access"],
+            "refresh": tokens["refresh"],
+        }
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):

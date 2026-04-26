@@ -1,8 +1,42 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
+
+
+PUBLIC_USER_TYPES = (
+    User.USER_TYPE_USER,
+    User.USER_TYPE_COACH,
+    User.USER_TYPE_ACADEMY_OWNER,
+)
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    user_type = serializers.ChoiceField(choices=PUBLIC_USER_TYPES, default=User.USER_TYPE_USER)
+
+    class Meta:
+        model = User
+        fields = ("username", "email", "password", "phone", "user_type")
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_username(self, value):
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
 
 
 class LoginSerializer(serializers.Serializer):
