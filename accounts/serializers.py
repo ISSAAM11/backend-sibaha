@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
@@ -29,6 +31,16 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_username(self, value):
         if User.objects.filter(username__iexact=value).exists():
             raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_phone(self, value):
+        if not value:
+            return value
+        digits = re.sub(r'\D', '', value)
+        if len(digits) < 7:
+            raise serializers.ValidationError("Enter a valid phone number (at least 7 digits).")
+        if not re.match(r'^[\+\d\s\-\(\)]+$', value):
+            raise serializers.ValidationError("Phone number contains invalid characters.")
         return value
 
     def create(self, validated_data):
