@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Academy, OpeningHour, SwimmingPool
+from .models import Academy, Course, CourseTiming, Invitation, OpeningHour, SwimmingPool
 
 
 class OpeningHourSerializer(serializers.ModelSerializer):
@@ -26,6 +26,46 @@ class SwimmingPoolSerializer(serializers.ModelSerializer):
         ]
 
 
+class CourseTimingSerializer(serializers.ModelSerializer):
+    start_time = serializers.TimeField(format='%H:%M')
+    end_time   = serializers.TimeField(format='%H:%M')
+
+    class Meta:
+        model  = CourseTiming
+        fields = ['id', 'weekday', 'start_time', 'end_time']
+
+
+class CourseSerializer(serializers.ModelSerializer):
+    timings    = CourseTimingSerializer(many=True, read_only=True)
+    coach_id   = serializers.IntegerField(source='coach.id', read_only=True, allow_null=True)
+    coach_name = serializers.CharField(source='coach.username', read_only=True, allow_null=True)
+    pool_id    = serializers.IntegerField(source='pool.id', read_only=True, allow_null=True)
+
+    class Meta:
+        model  = Course
+        fields = [
+            'id', 'name', 'description', 'level',
+            'academy', 'coach_id', 'coach_name', 'pool_id',
+            'timings', 'created_at',
+        ]
+
+
+class InvitationSerializer(serializers.ModelSerializer):
+    from_owner_name = serializers.CharField(source='from_owner.username', read_only=True)
+    to_coach_name   = serializers.CharField(source='to_coach.username', read_only=True)
+    course_name     = serializers.CharField(source='course.name', read_only=True)
+
+    class Meta:
+        model  = Invitation
+        fields = [
+            'id', 'from_owner', 'from_owner_name',
+            'to_coach', 'to_coach_name',
+            'course', 'course_name',
+            'status', 'created_at', 'responded_at',
+        ]
+        read_only_fields = ['status', 'created_at', 'responded_at']
+
+
 class AcademyListSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(source='picture', use_url=True, allow_null=True)
 
@@ -38,12 +78,14 @@ class AcademySerializer(serializers.ModelSerializer):
     image                  = serializers.ImageField(source='picture', use_url=True, allow_null=True)
     pool_list              = serializers.SerializerMethodField()
     weekday_availabilities = OpeningHourSerializer(source='opening_hours', many=True)
+    courses                = CourseSerializer(many=True, read_only=True)
+    owner_id               = serializers.IntegerField(source='owner.id', read_only=True, allow_null=True)
 
     class Meta:
         model  = Academy
         fields = [
-            'id', 'name', 'city', 'address', 'description',
-            'specialities', 'image', 'pool_list',
+            'id', 'name', 'owner_id', 'city', 'address', 'description',
+            'specialities', 'image', 'pool_list', 'courses',
             'weekday_availabilities', 'created_at', 'updated_at',
         ]
 
