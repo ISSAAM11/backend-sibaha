@@ -21,7 +21,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("username", "email", "password", "phone", "user_type")
+        fields = ("username", "email", "password", "phone", "user_type", "picture")
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
@@ -83,6 +83,44 @@ def get_tokens_for_user(user: User):
         "access": str(refresh.access_token),
         "refresh": str(refresh),
     }
+
+
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("username", "phone", "picture")
+
+    def validate_username(self, value):
+        qs = User.objects.filter(username__iexact=value).exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_phone(self, value):
+        if not value:
+            return value
+        digits = re.sub(r'\D', '', value)
+        if len(digits) < 7:
+            raise serializers.ValidationError("Enter a valid phone number (at least 7 digits).")
+        if not re.match(r'^[\+\d\s\-\(\)]+$', value):
+            raise serializers.ValidationError("Phone number contains invalid characters.")
+        return value
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
 
 
 class ForgotPasswordSerializer(serializers.Serializer):

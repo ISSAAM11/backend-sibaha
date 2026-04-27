@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -12,8 +12,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import PasswordResetOTP
 from .serializers import (
+    ChangePasswordSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
+    ProfileUpdateSerializer,
     RegisterSerializer,
     ResetPasswordSerializer,
     VerifyOTPSerializer,
@@ -23,14 +25,40 @@ from .serializers import (
 User = get_user_model()
 
 
-def build_user_payload(user: User):
+def build_user_payload(user: User, request=None):
+    picture_url = None
+    if user.picture:
+        picture_url = (
+            request.build_absolute_uri(user.picture.url)
+            if request
+            else user.picture.url
+        )
+
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "phone": user.phone,
         "user_type": user.user_type,
+        "picture": picture_url,
+        "date_joined": user.date_joined.isoformat(),
     }
+
+
+class ProfileView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        return Response(build_user_payload(request.user, request), status=status.HTTP_200_OK)
+
+    def patch(self, request, *args, **kwargs):
+        serializer = ProfileUpdateSerializer(
+            request.user, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(build_user_payload(request.user, request), status=status.HTTP_200_OK)
 
 
 class RegisterView(APIView):
@@ -43,7 +71,7 @@ class RegisterView(APIView):
 
         tokens = get_tokens_for_user(user)
         data = {
-            "user": build_user_payload(user),
+            "user": build_user_payload(user, request),
             "access": tokens["access"],
             "refresh": tokens["refresh"],
         }
@@ -61,7 +89,7 @@ class LoginView(APIView):
         tokens = get_tokens_for_user(user)
 
         data = {
-            "user": build_user_payload(user),
+            "user": build_user_payload(user, request),
             "access": tokens["access"],
             "refresh": tokens["refresh"],
         }
@@ -91,11 +119,25 @@ class RefreshTokenView(APIView):
             )
 
         data = {
-            "user": build_user_payload(user),
+            "user": build_user_payload(user, request),
             "access": str(access_token),
             "refresh": str(refresh),
         }
         return Response(data, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save()
+        return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
 
 
 class ForgotPasswordView(APIView):
