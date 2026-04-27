@@ -10,6 +10,8 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+    env_file:
+      - .env
     environment:
       - DJANGO_SETTINGS_MODULE=sibaha_backend.settings
 

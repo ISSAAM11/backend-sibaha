@@ -1,6 +1,8 @@
 from pathlib import Path
 from datetime import timedelta
 
+from decouple import config
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "django-insecure-change-this-key"
@@ -121,4 +123,7 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
 }
+
+RESEND_API_KEY     = config("RESEND_API_KEY")
+DEFAULT_FROM_EMAIL = "onboarding@resend.dev"  # replace with your verified sender once domain is set up
 
