@@ -71,7 +71,7 @@ class AcademyListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Academy
-        fields = ['id', 'name', 'city', 'address', 'specialities', 'image', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'city', 'address', 'specialities', 'latitude', 'longitude', 'image', 'created_at', 'updated_at']
 
 
 class AcademySerializer(serializers.ModelSerializer):
@@ -85,6 +85,7 @@ class AcademySerializer(serializers.ModelSerializer):
         model  = Academy
         fields = [
             'id', 'name', 'owner_id', 'city', 'address', 'description',
+            'latitude', 'longitude',
             'specialities', 'image', 'pool_list', 'courses',
             'weekday_availabilities', 'created_at', 'updated_at',
         ]

@@ -24,6 +24,8 @@ class Academy(models.Model):
     name         = models.CharField(max_length=100)
     city         = models.CharField(max_length=100, blank=True)
     address      = models.TextField(blank=True)
+    latitude     = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude    = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     description  = models.TextField(blank=True)
     picture      = models.ImageField(upload_to='academies/', blank=True, null=True)
     specialities = models.JSONField(default=list, blank=True)
