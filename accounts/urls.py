@@ -2,6 +2,8 @@ from django.urls import path
 
 from .views import (
     ChangePasswordView,
+    CoachDetailView,
+    CoachListView,
     ForgotPasswordView,
     LoginView,
     ProfileView,
@@ -20,4 +22,6 @@ urlpatterns = [
     path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
     path("verify-otp/", VerifyOTPView.as_view(), name="verify_otp"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
+    path("coaches/", CoachListView.as_view(), name="coach_list"),
+    path("coaches/<int:pk>/", CoachDetailView.as_view(), name="coach_detail"),
 ]

@@ -13,6 +13,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import PasswordResetOTP
 from .serializers import (
     ChangePasswordSerializer,
+    CoachSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
     ProfileUpdateSerializer,
@@ -241,4 +242,32 @@ class ResetPasswordView(APIView):
         otp_record.save()
 
         return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
+
+
+class CoachListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        coaches = User.objects.filter(
+            user_type=User.USER_TYPE_COACH
+        ).select_related('coach_profile')
+        serializer = CoachSerializer(coaches, many=True, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CoachDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk, *args, **kwargs):
+        try:
+            user = User.objects.select_related('coach_profile').get(
+                id=pk, user_type=User.USER_TYPE_COACH
+            )
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Coach not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = CoachSerializer(user, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 

@@ -137,3 +137,43 @@ class ResetPasswordSerializer(serializers.Serializer):
     otp = serializers.CharField(min_length=6, max_length=6)
     new_password = serializers.CharField(write_only=True, validators=[validate_password])
 
+
+class CoachSerializer(serializers.ModelSerializer):
+    picture = serializers.SerializerMethodField()
+    languages = serializers.SerializerMethodField()
+    speciality = serializers.SerializerMethodField()
+    about_me = serializers.SerializerMethodField()
+    years_of_experience = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            "id", "username", "phone", "picture",
+            "languages", "speciality", "about_me", "years_of_experience",
+        )
+
+    def _profile(self, obj):
+        return getattr(obj, 'coach_profile', None)
+
+    def get_picture(self, obj):
+        request = self.context.get("request")
+        if obj.picture:
+            return request.build_absolute_uri(obj.picture.url) if request else obj.picture.url
+        return None
+
+    def get_languages(self, obj):
+        p = self._profile(obj)
+        return p.languages if p else []
+
+    def get_speciality(self, obj):
+        p = self._profile(obj)
+        return p.speciality if p else ''
+
+    def get_about_me(self, obj):
+        p = self._profile(obj)
+        return p.about_me if p else ''
+
+    def get_years_of_experience(self, obj):
+        p = self._profile(obj)
+        return p.years_of_experience if p else None
+

@@ -37,6 +37,21 @@ class CustomUser(AbstractUser):
         return self.user_type == self.USER_TYPE_ACADEMY_OWNER
 
 
+class CoachProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='coach_profile',
+    )
+    languages = models.JSONField(default=list, blank=True)
+    speciality = models.CharField(max_length=200, blank=True)
+    about_me = models.TextField(blank=True)
+    years_of_experience = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"CoachProfile({self.user.username})"
+
+
 class PasswordResetOTP(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_reset_otps"

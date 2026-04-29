@@ -1,5 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -8,7 +8,7 @@ from .serializers import AcademyListSerializer, AcademySerializer, SwimmingPoolS
 
 
 class AcademyListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         academies = Academy.objects.all()
@@ -17,7 +17,7 @@ class AcademyListView(APIView):
 
 
 class AcademyDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, pk):
         try:
@@ -29,7 +29,7 @@ class AcademyDetailView(APIView):
 
 
 class PoolListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         pools = SwimmingPool.objects.select_related('academy').all()
@@ -38,7 +38,7 @@ class PoolListView(APIView):
 
 
 class PoolDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, pk):
         try:
