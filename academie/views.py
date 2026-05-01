@@ -1,10 +1,10 @@
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Academy, SwimmingPool
-from .serializers import AcademyListSerializer, AcademySerializer, SwimmingPoolSerializer
+from .serializers import AcademyCreateSerializer, AcademyListSerializer, AcademySerializer, SwimmingPoolSerializer
 
 
 class AcademyListView(APIView):
@@ -26,6 +26,23 @@ class AcademyDetailView(APIView):
             return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = AcademySerializer(academy, context={'request': request})
         return Response({'data': serializer.data})
+
+
+class MyAcademyListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        academies = Academy.objects.filter(owner=request.user)
+        serializer = AcademyListSerializer(academies, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+    def post(self, request):
+        serializer = AcademyCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(owner=request.user)
+            out = AcademyListSerializer(serializer.instance, context={'request': request})
+            return Response({'data': out.data}, status=status.HTTP_201_CREATED)
+        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PoolListView(APIView):

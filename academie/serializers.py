@@ -66,6 +66,12 @@ class InvitationSerializer(serializers.ModelSerializer):
         read_only_fields = ['status', 'created_at', 'responded_at']
 
 
+class AcademyCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Academy
+        fields = ['name', 'city', 'address', 'description', 'specialities', 'picture', 'latitude', 'longitude']
+
+
 class AcademyListSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(source='picture', use_url=True, allow_null=True)
 
