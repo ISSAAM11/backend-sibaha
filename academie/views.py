@@ -64,3 +64,24 @@ class PoolDetailView(APIView):
             return Response({'error': 'Pool not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = SwimmingPoolSerializer(pool, context={'request': request})
         return Response({'data': serializer.data})
+
+
+class MyAcademyUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def patch(self, request, pk):
+        try:
+            academy = Academy.objects.get(pk=pk, owner=request.user)
+        except Academy.DoesNotExist:
+            return Response({'error': 'Academy not found or you do not have permission to edit it'},
+                          status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AcademyCreateSerializer(academy, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            updated_academy = AcademyListSerializer(academy, context={'request': request})
+            return Response({'data': updated_academy.data}, status=status.HTTP_200_OK)
+        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
