@@ -3,8 +3,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Academy, SwimmingPool
-from .serializers import AcademyCreateSerializer, AcademyListSerializer, AcademySerializer, SwimmingPoolCreateSerializer, SwimmingPoolSerializer
+from .models import Academy, Review, SwimmingPool
+from .serializers import (
+    AcademyCreateSerializer, AcademyListSerializer, AcademySerializer,
+    ReviewSerializer, SwimmingPoolCreateSerializer, SwimmingPoolSerializer,
+)
 
 
 class AcademyListView(APIView):
@@ -137,3 +140,44 @@ class MyAcademyPoolDetailView(APIView):
                             status=status.HTTP_404_NOT_FOUND)
         pool.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AcademyReviewListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, pk):
+        if not Academy.objects.filter(pk=pk).exists():
+            return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
+        reviews = Review.objects.filter(academy_id=pk).select_related('user')
+        serializer = ReviewSerializer(reviews, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+    def post(self, request, pk):
+        try:
+            academy = Academy.objects.get(pk=pk)
+        except Academy.DoesNotExist:
+            return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ReviewSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        review, created = Review.objects.get_or_create(
+            academy=academy,
+            user=request.user,
+            defaults={
+                'rating': serializer.validated_data['rating'],
+                'comment': serializer.validated_data.get('comment', ''),
+            },
+        )
+        if not created:
+            review.rating = serializer.validated_data['rating']
+            review.comment = serializer.validated_data.get('comment', '')
+            review.save()
+
+        out = ReviewSerializer(review, context={'request': request})
+        http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response({'data': out.data}, status=http_status)

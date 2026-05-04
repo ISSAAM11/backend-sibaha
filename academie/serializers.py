@@ -1,5 +1,7 @@
+from django.db.models import Avg, Count
 from rest_framework import serializers
-from .models import Academy, Course, CourseTiming, Invitation, OpeningHour, SwimmingPool
+
+from .models import Academy, Course, CourseTiming, Invitation, OpeningHour, Review, SwimmingPool
 
 
 class OpeningHourSerializer(serializers.ModelSerializer):
@@ -66,6 +68,22 @@ class InvitationSerializer(serializers.ModelSerializer):
         read_only_fields = ['status', 'created_at', 'responded_at']
 
 
+class ReviewSerializer(serializers.ModelSerializer):
+    username     = serializers.CharField(source='user.username', read_only=True)
+    user_picture = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Review
+        fields = ['id', 'user_id', 'username', 'user_picture', 'rating', 'comment', 'created_at']
+        read_only_fields = ['id', 'user_id', 'username', 'user_picture', 'created_at']
+
+    def get_user_picture(self, obj):
+        request = self.context.get('request')
+        if obj.user.picture and request:
+            return request.build_absolute_uri(obj.user.picture.url)
+        return None
+
+
 class SwimmingPoolCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SwimmingPool
@@ -79,14 +97,18 @@ class AcademyCreateSerializer(serializers.ModelSerializer):
 
 
 class AcademyListSerializer(serializers.ModelSerializer):
-    image     = serializers.ImageField(source='picture', use_url=True, allow_null=True)
-    pool_list = serializers.SerializerMethodField()
+    image          = serializers.ImageField(source='picture', use_url=True, allow_null=True)
+    pool_list      = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    review_count   = serializers.SerializerMethodField()
 
     class Meta:
         model  = Academy
         fields = [
             'id', 'name', 'city', 'address', 'description', 'specialities',
-            'latitude', 'longitude', 'image', 'pool_list', 'created_at', 'updated_at',
+            'latitude', 'longitude', 'image', 'pool_list',
+            'average_rating', 'review_count',
+            'created_at', 'updated_at',
         ]
 
     def get_pool_list(self, obj):
@@ -104,6 +126,13 @@ class AcademyListSerializer(serializers.ModelSerializer):
             for p in obj.swimming_pools.all()
         ]
 
+    def get_average_rating(self, obj):
+        result = obj.reviews.aggregate(avg=Avg('rating'))['avg']
+        return round(result, 1) if result is not None else None
+
+    def get_review_count(self, obj):
+        return obj.reviews.count()
+
 
 class AcademySerializer(serializers.ModelSerializer):
     image                  = serializers.ImageField(source='picture', use_url=True, allow_null=True)
@@ -111,6 +140,8 @@ class AcademySerializer(serializers.ModelSerializer):
     weekday_availabilities = OpeningHourSerializer(source='opening_hours', many=True)
     courses                = CourseSerializer(many=True, read_only=True)
     owner_id               = serializers.IntegerField(source='owner.id', read_only=True, allow_null=True)
+    average_rating         = serializers.SerializerMethodField()
+    review_count           = serializers.SerializerMethodField()
 
     class Meta:
         model  = Academy
@@ -118,7 +149,9 @@ class AcademySerializer(serializers.ModelSerializer):
             'id', 'name', 'owner_id', 'city', 'address', 'description',
             'latitude', 'longitude',
             'specialities', 'image', 'pool_list', 'courses',
-            'weekday_availabilities', 'created_at', 'updated_at',
+            'weekday_availabilities',
+            'average_rating', 'review_count',
+            'created_at', 'updated_at',
         ]
 
     def get_pool_list(self, obj):
@@ -131,3 +164,10 @@ class AcademySerializer(serializers.ModelSerializer):
             }
             for p in obj.swimming_pools.all()
         ]
+
+    def get_average_rating(self, obj):
+        result = obj.reviews.aggregate(avg=Avg('rating'))['avg']
+        return round(result, 1) if result is not None else None
+
+    def get_review_count(self, obj):
+        return obj.reviews.count()
