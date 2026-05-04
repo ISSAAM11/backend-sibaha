@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Academy, SwimmingPool
-from .serializers import AcademyCreateSerializer, AcademyListSerializer, AcademySerializer, SwimmingPoolSerializer
+from .serializers import AcademyCreateSerializer, AcademyListSerializer, AcademySerializer, SwimmingPoolCreateSerializer, SwimmingPoolSerializer
 
 
 class AcademyListView(APIView):
@@ -32,7 +32,7 @@ class MyAcademyListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        academies = Academy.objects.filter(owner=request.user)
+        academies = Academy.objects.filter(owner=request.user).prefetch_related('swimming_pools')
         serializer = AcademyListSerializer(academies, many=True, context={'request': request})
         return Response({'data': serializer.data})
 
@@ -74,7 +74,7 @@ class MyAcademyUpdateView(APIView):
 
     def patch(self, request, pk):
         try:
-            academy = Academy.objects.get(pk=pk, owner=request.user)
+            academy = Academy.objects.prefetch_related('swimming_pools').get(pk=pk, owner=request.user)
         except Academy.DoesNotExist:
             return Response({'error': 'Academy not found or you do not have permission to edit it'},
                           status=status.HTTP_404_NOT_FOUND)
@@ -85,3 +85,55 @@ class MyAcademyUpdateView(APIView):
             updated_academy = AcademyListSerializer(academy, context={'request': request})
             return Response({'data': updated_academy.data}, status=status.HTTP_200_OK)
         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MyAcademyPoolCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            academy = Academy.objects.get(pk=pk, owner=request.user)
+        except Academy.DoesNotExist:
+            return Response({'error': 'Academy not found or permission denied'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        serializer = SwimmingPoolCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            pool = serializer.save(academy=academy)
+            out = SwimmingPoolSerializer(pool, context={'request': request})
+            return Response({'data': out.data}, status=status.HTTP_201_CREATED)
+        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MyAcademyPoolDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_pool(self, pk, pool_pk, user):
+        try:
+            academy = Academy.objects.get(pk=pk, owner=user)
+        except Academy.DoesNotExist:
+            return None
+        try:
+            return academy.swimming_pools.get(pk=pool_pk)
+        except SwimmingPool.DoesNotExist:
+            return None
+
+    def patch(self, request, pk, pool_pk):
+        pool = self._get_pool(pk, pool_pk, request.user)
+        if pool is None:
+            return Response({'error': 'Pool not found or permission denied'},
+                            status=status.HTTP_404_NOT_FOUND)
+        serializer = SwimmingPoolCreateSerializer(pool, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            out = SwimmingPoolSerializer(pool, context={'request': request})
+            return Response({'data': out.data})
+        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, pool_pk):
+        pool = self._get_pool(pk, pool_pk, request.user)
+        if pool is None:
+            return Response({'error': 'Pool not found or permission denied'},
+                            status=status.HTTP_404_NOT_FOUND)
+        pool.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -66,6 +66,12 @@ class InvitationSerializer(serializers.ModelSerializer):
         read_only_fields = ['status', 'created_at', 'responded_at']
 
 
+class SwimmingPoolCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = SwimmingPool
+        fields = ['name', 'speciality', 'dimension', 'heated', 'showers', 'image']
+
+
 class AcademyCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Academy
@@ -73,11 +79,30 @@ class AcademyCreateSerializer(serializers.ModelSerializer):
 
 
 class AcademyListSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(source='picture', use_url=True, allow_null=True)
+    image     = serializers.ImageField(source='picture', use_url=True, allow_null=True)
+    pool_list = serializers.SerializerMethodField()
 
     class Meta:
         model  = Academy
-        fields = ['id', 'name', 'city', 'address', 'specialities', 'latitude', 'longitude', 'image', 'created_at', 'updated_at']
+        fields = [
+            'id', 'name', 'city', 'address', 'description', 'specialities',
+            'latitude', 'longitude', 'image', 'pool_list', 'created_at', 'updated_at',
+        ]
+
+    def get_pool_list(self, obj):
+        request = self.context.get('request')
+        return [
+            {
+                'id': p.id,
+                'name': p.name,
+                'image': request.build_absolute_uri(p.image.url) if request and p.image else None,
+                'speciality': p.speciality,
+                'dimension': p.dimension,
+                'heated': p.heated,
+                'showers': p.showers,
+            }
+            for p in obj.swimming_pools.all()
+        ]
 
 
 class AcademySerializer(serializers.ModelSerializer):
