@@ -9,7 +9,8 @@ from django.utils import timezone
 from .models import Academy, Course, Invitation, Review, Subscription, SwimmingPool
 from .serializers import (
     AcademyClientSerializer, AcademyCreateSerializer, AcademyListSerializer, AcademySerializer,
-    CoachCourseSerializer, InvitationSerializer, ReviewSerializer,
+    CoachCourseSerializer, CourseSerializer, CourseWriteSerializer,
+    InvitationSerializer, ReviewSerializer,
     SubscriptionSerializer,
     SwimmingPoolCreateSerializer, SwimmingPoolSerializer,
 )
@@ -248,6 +249,35 @@ class MySubscriptionsView(APIView):
         return Response({'data': serializer.data})
 
 
+class MyEnrollmentsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.user_type != 'user':
+            return Response({'error': 'Only regular users can access their enrollments.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        enrollments = (
+            Subscription.objects
+            .filter(user=request.user, course__isnull=False)
+            .select_related('academy', 'course', 'course__coach')
+            .prefetch_related('course__timings')
+        )
+        serializer = SubscriptionSerializer(enrollments, many=True)
+        return Response({'data': serializer.data})
+
+
+class DeleteEnrollmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            enrollment = Subscription.objects.get(pk=pk, user=request.user, course__isnull=False)
+        except Subscription.DoesNotExist:
+            return Response({'error': 'Enrollment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        enrollment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class AcademyClientListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -336,6 +366,32 @@ class MyInvitationDetailView(APIView):
         return Response({'data': serializer.data})
 
 
+class CourseEnrollView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if request.user.user_type != 'user':
+            return Response({'error': 'Only regular users can enroll in courses.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            course = Course.objects.select_related('academy').get(pk=pk)
+        except Course.DoesNotExist:
+            return Response({'error': 'Course not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if Subscription.objects.filter(user=request.user, course=course).exists():
+            return Response({'error': 'You are already enrolled in this course.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        subscription = Subscription.objects.create(
+            user=request.user,
+            academy=course.academy,
+            course=course,
+            price_at_subscription=course.price_per_month,
+        )
+        out = SubscriptionSerializer(subscription)
+        return Response({'data': out.data}, status=status.HTTP_201_CREATED)
+
+
 class MyCoursesView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -351,3 +407,67 @@ class MyCoursesView(APIView):
         )
         serializer = CoachCourseSerializer(courses, many=True, context={'request': request})
         return Response({'data': serializer.data})
+
+
+class AcademyCourseListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_owned_academy(self, pk, user):
+        try:
+            return Academy.objects.get(pk=pk, owner=user)
+        except Academy.DoesNotExist:
+            raise PermissionDenied('You do not own this academy.')
+
+    def get(self, request, pk):
+        self._get_owned_academy(pk, request.user)
+        courses = (
+            Course.objects
+            .filter(academy_id=pk)
+            .select_related('coach', 'pool')
+            .prefetch_related('timings')
+        )
+        serializer = CourseSerializer(courses, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+    def post(self, request, pk):
+        academy = self._get_owned_academy(pk, request.user)
+        serializer = CourseWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        course = serializer.save(academy=academy)
+        out = CourseSerializer(course, context={'request': request})
+        return Response({'data': out.data}, status=status.HTTP_201_CREATED)
+
+
+class AcademyCourseDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_course(self, pk, course_pk, user):
+        try:
+            Academy.objects.get(pk=pk, owner=user)
+        except Academy.DoesNotExist:
+            raise PermissionDenied('You do not own this academy.')
+        try:
+            return Course.objects.select_related('coach', 'pool').prefetch_related('timings').get(
+                pk=course_pk, academy_id=pk
+            )
+        except Course.DoesNotExist:
+            return None
+
+    def patch(self, request, pk, course_pk):
+        course = self._get_course(pk, course_pk, request.user)
+        if course is None:
+            return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CourseWriteSerializer(course, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+        out = CourseSerializer(course, context={'request': request})
+        return Response({'data': out.data})
+
+    def delete(self, request, pk, course_pk):
+        course = self._get_course(pk, course_pk, request.user)
+        if course is None:
+            return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+        course.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

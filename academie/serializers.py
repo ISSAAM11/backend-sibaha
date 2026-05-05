@@ -38,18 +38,67 @@ class CourseTimingSerializer(serializers.ModelSerializer):
 
 
 class CourseSerializer(serializers.ModelSerializer):
-    timings    = CourseTimingSerializer(many=True, read_only=True)
-    coach_id   = serializers.IntegerField(source='coach.id', read_only=True, allow_null=True)
-    coach_name = serializers.CharField(source='coach.username', read_only=True, allow_null=True)
-    pool_id    = serializers.IntegerField(source='pool.id', read_only=True, allow_null=True)
+    timings       = CourseTimingSerializer(many=True, read_only=True)
+    coach_id      = serializers.IntegerField(source='coach.id', read_only=True, allow_null=True)
+    coach_name    = serializers.CharField(source='coach.username', read_only=True, allow_null=True)
+    coach_picture = serializers.SerializerMethodField(read_only=True)
+    pool_id       = serializers.IntegerField(source='pool.id', read_only=True, allow_null=True)
+
+    def get_coach_picture(self, obj):
+        request = self.context.get('request')
+        if obj.coach and obj.coach.picture and request:
+            return request.build_absolute_uri(obj.coach.picture.url)
+        return None
 
     class Meta:
         model  = Course
         fields = [
-            'id', 'name', 'description', 'level',
-            'academy', 'coach_id', 'coach_name', 'pool_id',
+            'id', 'name', 'description', 'level', 'price_per_month',
+            'academy', 'coach_id', 'coach_name', 'coach_picture', 'pool_id',
             'timings', 'created_at',
         ]
+
+
+class CourseTimingWriteSerializer(serializers.Serializer):
+    weekday    = serializers.ChoiceField(choices=[c[0] for c in CourseTiming._meta.get_field('weekday').choices])
+    start_time = serializers.TimeField()
+    end_time   = serializers.TimeField()
+
+
+class CourseWriteSerializer(serializers.ModelSerializer):
+    timings = CourseTimingWriteSerializer(many=True, required=False, default=list)
+    coach   = serializers.PrimaryKeyRelatedField(
+        queryset=Course._meta.get_field('coach').related_model.objects.filter(user_type='coach'),
+        allow_null=True, required=False,
+    )
+    pool    = serializers.PrimaryKeyRelatedField(
+        queryset=SwimmingPool.objects.all(),
+        allow_null=True, required=False,
+    )
+
+    class Meta:
+        model  = Course
+        fields = ['name', 'description', 'level', 'price_per_month', 'coach', 'pool', 'timings']
+
+    def create(self, validated_data):
+        timings_data = validated_data.pop('timings', [])
+        course = Course.objects.create(**validated_data)
+        CourseTiming.objects.bulk_create([
+            CourseTiming(course=course, **t) for t in timings_data
+        ])
+        return course
+
+    def update(self, instance, validated_data):
+        timings_data = validated_data.pop('timings', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if timings_data is not None:
+            instance.timings.all().delete()
+            CourseTiming.objects.bulk_create([
+                CourseTiming(course=instance, **t) for t in timings_data
+            ])
+        return instance
 
 
 class InvitationSerializer(serializers.ModelSerializer):
@@ -211,12 +260,35 @@ class AcademySerializer(serializers.ModelSerializer):
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
-    academy_name = serializers.CharField(source='academy.name', read_only=True)
+    academy_name    = serializers.CharField(source='academy.name', read_only=True)
+    academy_city    = serializers.CharField(source='academy.city', read_only=True)
+    academy_address = serializers.CharField(source='academy.address', read_only=True)
+    course_id       = serializers.IntegerField(source='course.id', read_only=True, allow_null=True)
+    course_name     = serializers.CharField(source='course.name', read_only=True, allow_null=True)
+    course_level    = serializers.CharField(source='course.level', read_only=True, allow_null=True)
+    coach_name      = serializers.SerializerMethodField()
+    timings         = serializers.SerializerMethodField()
+
+    def get_coach_name(self, obj):
+        if obj.course and obj.course.coach:
+            coach = obj.course.coach
+            full_name = f"{coach.first_name} {coach.last_name}".strip()
+            return full_name or coach.username
+        return None
+
+    def get_timings(self, obj):
+        if obj.course:
+            return CourseTimingSerializer(obj.course.timings.all(), many=True).data
+        return []
 
     class Meta:
         model  = Subscription
-        fields = ['id', 'academy_id', 'academy_name', 'price_at_subscription', 'status', 'subscribed_at']
-        read_only_fields = ['id', 'academy_id', 'academy_name', 'price_at_subscription', 'status', 'subscribed_at']
+        fields = [
+            'id', 'academy_id', 'academy_name', 'academy_city', 'academy_address',
+            'course_id', 'course_name', 'course_level', 'coach_name', 'timings',
+            'price_at_subscription', 'status', 'subscribed_at',
+        ]
+        read_only_fields = fields
 
 
 class AcademyClientSerializer(serializers.ModelSerializer):

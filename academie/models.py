@@ -94,10 +94,11 @@ class Course(models.Model):
         related_name='courses',
         null=True, blank=True,
     )
-    name        = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    level       = models.CharField(max_length=20, choices=LEVELS, default=LEVEL_BEGINNER)
-    created_at  = models.DateTimeField(auto_now_add=True)
+    name            = models.CharField(max_length=100)
+    description     = models.TextField(blank=True)
+    level           = models.CharField(max_length=20, choices=LEVELS, default=LEVEL_BEGINNER)
+    price_per_month = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    created_at      = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.name} ({self.academy.name})"
@@ -197,12 +198,18 @@ class Subscription(models.Model):
         limit_choices_to={'user_type': 'user'},
     )
     academy               = models.ForeignKey(Academy, on_delete=models.CASCADE, related_name='subscriptions')
+    course                = models.ForeignKey(
+        Course,
+        on_delete=models.SET_NULL,
+        related_name='enrollments',
+        null=True, blank=True,
+    )
     price_at_subscription = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     status                = models.CharField(max_length=20, choices=STATUSES, default=STATUS_ACTIVE)
     subscribed_at         = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('user', 'academy')
+        unique_together = ('user', 'course')
         ordering = ['-subscribed_at']
 
     def __str__(self):
