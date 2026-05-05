@@ -95,6 +95,15 @@ class MyAcademyUpdateView(APIView):
             return Response({'data': updated_academy.data}, status=status.HTTP_200_OK)
         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+    def delete(self, request, pk):
+        try:
+            academy = Academy.objects.get(pk=pk, owner=request.user)
+        except Academy.DoesNotExist:
+            return Response({'error': 'Academy not found or you do not have permission to delete it'},
+                            status=status.HTTP_404_NOT_FOUND)
+        academy.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class MyAcademyPoolCreateView(APIView):
     permission_classes = [IsAuthenticated]

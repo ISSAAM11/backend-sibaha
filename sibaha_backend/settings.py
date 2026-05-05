@@ -1,15 +1,14 @@
 from pathlib import Path
 from datetime import timedelta
 
-from decouple import config
+import dj_database_url
+from decouple import Csv, config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-change-this-key"
-
-DEBUG = True
-
-ALLOWED_HOSTS: list[str] = ["*"]
+SECRET_KEY = config("SECRET_KEY", default="django-insecure-change-this-key")
+DEBUG = config("DEBUG", default=True, cast=bool)
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -22,15 +21,17 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
+    "cloudinary_storage",
+    "cloudinary",
     # local
     "accounts",
     "academie",
 ]
 
 MIDDLEWARE = [
-    # CORS middleware should be placed as high as possible
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -59,40 +60,49 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "sibaha_backend.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# Database — uses DATABASE_URL env var in production, SQLite locally
+_database_url = config("DATABASE_URL", default=None)
+if _database_url:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _database_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
 
-STATIC_URL = "static/"
+# Static files (WhiteNoise serves them in production)
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
+# Media files — Cloudinary in production, local filesystem in dev
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+_cloudinary_url = config("CLOUDINARY_URL", default=None)
+if _cloudinary_url:
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+    CLOUDINARY_STORAGE = {"CLOUDINARY_URL": _cloudinary_url}
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -102,28 +112,14 @@ REST_FRAMEWORK = {
     ),
 }
 
-# CORS configuration – during development allow all origins or list specific ones
 CORS_ALLOW_ALL_ORIGINS = True
-# alternatively:
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:60982",
-#     "http://127.0.0.1:8000",
-# ]
+
 AUTH_USER_MODEL = "accounts.CustomUser"
 
-
-from rest_framework_simplejwt.settings import api_settings as jwt_settings
-
-# jwt_settings.ACCESS_TOKEN_LIFETIME and REFRESH_TOKEN_LIFETIME are already
-# datetime.timedelta instances.  Wrapping them in another timedelta caused
-# ``TypeError: unsupported type for timedelta minutes component`` when the
-# settings module was imported.  Just use the values directly (or override
-# them with a numeric value if customization is required).
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
 }
 
-RESEND_API_KEY     = config("RESEND_API_KEY")
-DEFAULT_FROM_EMAIL = "onboarding@resend.dev"  # replace with your verified sender once domain is set up
-
+RESEND_API_KEY = config("RESEND_API_KEY", default="")
+DEFAULT_FROM_EMAIL = "onboarding@resend.dev"
