@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Academy, Course, CourseTiming, Invitation, OpeningHour, SwimmingPool
+from .models import Academy, Course, CourseTiming, Invitation, OpeningHour, Subscription, SwimmingPool
 
 
 class OpeningHourInline(admin.TabularInline):
@@ -35,3 +35,10 @@ class InvitationAdmin(admin.ModelAdmin):
 
 
 admin.site.register(SwimmingPool)
+
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'academy', 'price_at_subscription', 'status', 'subscribed_at')
+    list_filter = ('status',)
+    search_fields = ('user__username', 'academy__name')

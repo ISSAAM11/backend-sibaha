@@ -2,11 +2,16 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 
-from .models import Academy, Review, SwimmingPool
+from django.utils import timezone
+
+from .models import Academy, Course, Invitation, Review, Subscription, SwimmingPool
 from .serializers import (
-    AcademyCreateSerializer, AcademyListSerializer, AcademySerializer,
-    ReviewSerializer, SwimmingPoolCreateSerializer, SwimmingPoolSerializer,
+    AcademyClientSerializer, AcademyCreateSerializer, AcademyListSerializer, AcademySerializer,
+    CoachCourseSerializer, InvitationSerializer, ReviewSerializer,
+    SubscriptionSerializer,
+    SwimmingPoolCreateSerializer, SwimmingPoolSerializer,
 )
 
 
@@ -142,6 +147,32 @@ class MyAcademyPoolDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class AcademyInvitationListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_owned_academy(self, pk, user):
+        try:
+            return Academy.objects.get(pk=pk, owner=user)
+        except Academy.DoesNotExist:
+            raise PermissionDenied('You do not own this academy.')
+
+    def get(self, request, pk):
+        self._get_owned_academy(pk, request.user)
+        invitations = Invitation.objects.filter(
+            academy_id=pk, from_owner=request.user
+        ).select_related('to_coach', 'from_owner', 'course')
+        serializer = InvitationSerializer(invitations, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+    def post(self, request, pk):
+        academy = self._get_owned_academy(pk, request.user)
+        serializer = InvitationSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save(from_owner=request.user, academy=academy)
+        return Response({'data': serializer.data}, status=status.HTTP_201_CREATED)
+
+
 class AcademyReviewListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == 'POST':
@@ -181,3 +212,142 @@ class AcademyReviewListCreateView(APIView):
         out = ReviewSerializer(review, context={'request': request})
         http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         return Response({'data': out.data}, status=http_status)
+
+
+class SubscribeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if request.user.user_type != 'user':
+            return Response({'error': 'Only regular users can subscribe to academies.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            academy = Academy.objects.get(pk=pk)
+        except Academy.DoesNotExist:
+            return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if Subscription.objects.filter(user=request.user, academy=academy).exists():
+            return Response({'error': 'You are already subscribed to this academy.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        subscription = Subscription.objects.create(
+            user=request.user,
+            academy=academy,
+            price_at_subscription=academy.monthly_price,
+        )
+        out = SubscriptionSerializer(subscription)
+        return Response({'data': out.data}, status=status.HTTP_201_CREATED)
+
+
+class MySubscriptionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        subscriptions = Subscription.objects.filter(user=request.user).select_related('academy')
+        serializer = SubscriptionSerializer(subscriptions, many=True)
+        return Response({'data': serializer.data})
+
+
+class AcademyClientListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_owned_academy(self, pk, user):
+        try:
+            return Academy.objects.get(pk=pk, owner=user)
+        except Academy.DoesNotExist:
+            raise PermissionDenied('You do not own this academy.')
+
+    def get(self, request, pk):
+        self._get_owned_academy(pk, request.user)
+        subscriptions = (
+            Subscription.objects
+            .filter(academy_id=pk)
+            .select_related('user')
+        )
+        serializer = AcademyClientSerializer(subscriptions, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+
+class AcademyClientDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_subscription(self, academy_pk, subscription_pk, owner):
+        try:
+            Academy.objects.get(pk=academy_pk, owner=owner)
+        except Academy.DoesNotExist:
+            raise PermissionDenied('You do not own this academy.')
+        try:
+            return Subscription.objects.get(pk=subscription_pk, academy_id=academy_pk)
+        except Subscription.DoesNotExist:
+            return None
+
+    def delete(self, request, pk, subscription_pk):
+        subscription = self._get_subscription(pk, subscription_pk, request.user)
+        if subscription is None:
+            return Response({'error': 'Client subscription not found'}, status=status.HTTP_404_NOT_FOUND)
+        subscription.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MyInvitationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.user_type != 'coach':
+            return Response({'error': 'Only coaches can access their invitations.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        invitations = (
+            Invitation.objects
+            .filter(to_coach=request.user)
+            .select_related('from_owner', 'to_coach', 'academy', 'course')
+        )
+        serializer = InvitationSerializer(invitations, many=True, context={'request': request})
+        return Response({'data': serializer.data})
+
+
+class MyInvitationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        if request.user.user_type != 'coach':
+            return Response({'error': 'Only coaches can respond to invitations.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            invitation = Invitation.objects.select_related('from_owner', 'to_coach', 'academy', 'course').get(
+                pk=pk, to_coach=request.user
+            )
+        except Invitation.DoesNotExist:
+            return Response({'error': 'Invitation not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = request.data.get('status')
+        if new_status not in ('accepted', 'declined'):
+            return Response({'error': "Status must be 'accepted' or 'declined'."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if invitation.status != 'pending':
+            return Response({'error': 'This invitation has already been responded to.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        invitation.status = new_status
+        invitation.responded_at = timezone.now()
+        invitation.save()
+
+        serializer = InvitationSerializer(invitation, context={'request': request})
+        return Response({'data': serializer.data})
+
+
+class MyCoursesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.user_type != 'coach':
+            return Response({'error': 'Only coaches can access their courses.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        courses = (
+            Course.objects
+            .filter(coach=request.user)
+            .select_related('academy', 'pool')
+            .prefetch_related('timings')
+        )
+        serializer = CoachCourseSerializer(courses, many=True, context={'request': request})
+        return Response({'data': serializer.data})

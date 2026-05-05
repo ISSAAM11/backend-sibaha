@@ -29,9 +29,10 @@ class Academy(models.Model):
     longitude    = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     description  = models.TextField(blank=True)
     picture      = models.ImageField(upload_to='academies/', blank=True, null=True)
-    specialities = models.JSONField(default=list, blank=True)
-    created_at   = models.DateTimeField(auto_now_add=True)
-    updated_at   = models.DateTimeField(auto_now=True)
+    specialities  = models.JSONField(default=list, blank=True)
+    monthly_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -155,14 +156,54 @@ class Invitation(models.Model):
         related_name='received_invitations',
         limit_choices_to={'user_type': 'coach'},
     )
-    course       = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='invitations')
+    academy      = models.ForeignKey(
+        Academy,
+        on_delete=models.CASCADE,
+        related_name='coach_invitations',
+        null=True, blank=True,
+    )
+    course       = models.ForeignKey(
+        Course,
+        on_delete=models.SET_NULL,
+        related_name='invitations',
+        null=True, blank=True,
+    )
     status       = models.CharField(max_length=10, choices=STATUSES, default=STATUS_PENDING)
     created_at   = models.DateTimeField(auto_now_add=True)
     responded_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('to_coach', 'course')
+        unique_together = ('to_coach', 'academy')
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.from_owner} → {self.to_coach} for {self.course.name} [{self.status}]"
+        course_label = self.course.name if self.course else 'no course'
+        return f"{self.from_owner} → {self.to_coach} [{course_label}] [{self.status}]"
+
+
+class Subscription(models.Model):
+    STATUS_ACTIVE    = 'active'
+    STATUS_CANCELLED = 'cancelled'
+
+    STATUSES = (
+        (STATUS_ACTIVE,    'Active'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    )
+
+    user                  = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='subscriptions',
+        limit_choices_to={'user_type': 'user'},
+    )
+    academy               = models.ForeignKey(Academy, on_delete=models.CASCADE, related_name='subscriptions')
+    price_at_subscription = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    status                = models.CharField(max_length=20, choices=STATUSES, default=STATUS_ACTIVE)
+    subscribed_at         = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'academy')
+        ordering = ['-subscribed_at']
+
+    def __str__(self):
+        return f"{self.user.username} → {self.academy.name} [{self.status}]"
