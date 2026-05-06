@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "pip install -r requirements-backend.txt && python manage.py migrate --noinput && python manage.py createsuperuser --noinput || true",
   "builds": [
     {
       "src": "api/index.py",
