@@ -10,6 +10,7 @@ urlpatterns = [
     path('my-academies/<int:pk>/pools/<int:pool_pk>/', views.MyAcademyPoolDetailView.as_view()),
     path('pool/', views.PoolListView.as_view()),
     path('pool/<int:pk>/', views.PoolDetailView.as_view()),
+    path('academy/<int:pk>/coaches/', views.AcademyCoachListView.as_view()),
     path('academy/<int:pk>/reviews/', views.AcademyReviewListCreateView.as_view()),
     path('my-academies/<int:pk>/invitations/', views.AcademyInvitationListCreateView.as_view()),
     path('academy/<int:pk>/subscribe/', views.SubscribeView.as_view()),

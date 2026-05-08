@@ -6,6 +6,8 @@ from rest_framework.exceptions import PermissionDenied
 
 from django.utils import timezone
 
+from django.contrib.auth import get_user_model
+
 from .models import Academy, Course, Invitation, Review, Subscription, SwimmingPool
 from .serializers import (
     AcademyClientSerializer, AcademyCreateSerializer, AcademyListSerializer, AcademySerializer,
@@ -14,6 +16,9 @@ from .serializers import (
     SubscriptionSerializer,
     SwimmingPoolCreateSerializer, SwimmingPoolSerializer,
 )
+from accounts.serializers import CoachSerializer
+
+User = get_user_model()
 
 
 class AcademyListView(APIView):
@@ -34,6 +39,22 @@ class AcademyDetailView(APIView):
         except Academy.DoesNotExist:
             return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = AcademySerializer(academy, context={'request': request})
+        return Response({'data': serializer.data})
+
+
+class AcademyCoachListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        if not Academy.objects.filter(pk=pk).exists():
+            return Response({'error': 'Academy not found'}, status=status.HTTP_404_NOT_FOUND)
+        coach_ids = (
+            Course.objects.filter(academy_id=pk, coach__isnull=False)
+            .values_list('coach_id', flat=True)
+            .distinct()
+        )
+        coaches = User.objects.filter(pk__in=coach_ids).select_related('coach_profile')
+        serializer = CoachSerializer(coaches, many=True, context={'request': request})
         return Response({'data': serializer.data})
 
 
